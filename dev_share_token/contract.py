@@ -7,11 +7,13 @@ def coin():
 
     supply = Variable()
     balances = Hash(default_value=0)
+    owner = Variable()
 
     @construct
     def seed(amount=1_000_000):
         balances[ctx.caller] = amount
         supply.set(amount)
+        owner.set(ctx.caller)
 
     @export
     def transfer(amount: float, to: str):
@@ -66,6 +68,12 @@ def coin():
             currency.transfer(reward, ctx.caller)
 
         supply.set(supply.get() - amount)
+
+    @export
+    def change_ownership(new_owner: str):
+        assert ctx.caller == owner.get(), 'Only the owner can change ownership!'
+
+        owner.set(new_owner)
 
 
 class TestCoinContract(TestCase):
@@ -152,3 +160,11 @@ class TestCoinContract(TestCase):
         self.assertEqual(self.coin.balances['colin'], 33)
         self.assertEqual(self.coin.balances['stu'], 1000000 - 33)
         self.assertEqual(self.coin.balances['stu', 'raghu'], 67)
+
+    def test_change_ownership_modifies_owner(self):
+        self.coin.change_ownership(new_owner='raghu')
+        self.assertEqual(self.coin.owner.get(), 'raghu')
+
+    def test_change_ownership_only_prior_owner(self):
+        with self.assertRaises(AssertionError):
+            self.coin.change_ownership(new_owner='colin', signer='raghu')
