@@ -4,6 +4,7 @@ from unittest import TestCase
 
 def coin():
     import currency
+    import submission
 
     supply = Variable()
     balances = Hash(default_value=0)
@@ -75,13 +76,26 @@ def coin():
 
         owner.set(new_owner)
 
+    @export
+    def change_developer(contract: str, new_developer: str):
+        assert ctx.caller == owner.get(), 'Only the owner can change the developer!'
+
+        submission.change_developer(contract=contract, new_developer=new_developer)
+
+
+def mock():
+    @export
+    def some_contract():
+        # Fees for this will go into the coin
+        pass
+
 
 class TestCoinContract(TestCase):
     def setUp(self):
         self.c = ContractingClient(signer='stu')
         self.c.flush()
 
-        with open('currency.c.py') as f:
+        with open('../common/currency.py') as f:
             code = f.read()
             self.c.submit(code, name='currency')
 
@@ -89,9 +103,24 @@ class TestCoinContract(TestCase):
 
         self.c.submit(coin)
         self.coin = self.c.get_contract('coin')
+        self.submission = self.c.get_contract('submission')
 
     def tearDown(self):
         self.c.flush()
+
+    def test_change_developer_works(self):
+        self.c.submit(mock)
+        m = self.c.get_contract('mock')
+
+        # Set up rev share
+        self.submission.change_developer(contract='mock', new_developer='coin')
+
+        self.assertEqual(m.__developer__, 'coin')
+
+        # Change it
+        self.coin.change_developer(contract='mock', new_developer='not_stu')
+
+        self.assertEqual(m.__developer__, 'not_stu')
 
     def test_redeem_not_enough_balance_throws_assert(self):
         with self.assertRaises(AssertionError):
